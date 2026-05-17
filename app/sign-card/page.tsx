@@ -467,7 +467,7 @@ const [cardLocked, setCardLocked] = useState(false);
     <button
   onClick={handleAddMessage}
   disabled={isSubmitting || cardLocked}
-            disabled={isSubmitting}
+            
             className="w-full py-4 rounded-xl font-bold text-white text-base transition-all disabled:opacity-50 bg-violet-700 hover:bg-violet-800"
           >
            {cardLocked
