@@ -1,0 +1,38 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="400" fill="url(#grad)" />
+
+  <circle cx="200" cy="100" r="80" fill="white" opacity="0.15"/>
+  <circle cx="1000" cy="300" r="140" fill="white" opacity="0.12"/>
+
+  <text
+    x="600"
+    y="180"
+    font-size="58"
+    fill="white"
+    text-anchor="middle"
+    font-family="Arial"
+    font-weight="bold"
+  >
+    Happy Birthday 🎉
+  </text>
+
+  <text
+    x="600"
+    y="240"
+    font-size="28"
+    fill="white"
+    text-anchor="middle"
+    font-family="Arial"
+  >
+    Wishing you joy and success
+  </text>
+
+</svg>

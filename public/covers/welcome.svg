@@ -1,0 +1,38 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="400" fill="url(#grad)" />
+
+  <circle cx="180" cy="100" r="90" fill="white" opacity="0.15"/>
+  <circle cx="980" cy="280" r="150" fill="white" opacity="0.12"/>
+
+  <text
+    x="600"
+    y="180"
+    font-size="58"
+    fill="white"
+    text-anchor="middle"
+    font-family="Arial"
+    font-weight="bold"
+  >
+    Welcome To The Team
+  </text>
+
+  <text
+    x="600"
+    y="240"
+    font-size="28"
+    fill="white"
+    text-anchor="middle"
+    font-family="Arial"
+  >
+    Excited to have you with us 🚀
+  </text>
+
+</svg>
