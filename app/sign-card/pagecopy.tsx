@@ -249,7 +249,7 @@ const [cardLocked, setCardLocked] = useState(false);
 
       {/* ── Clean header — title CENTERED ── */}
  <div className="border-b bg-white">
-  <div className="max-w-7xl mx-auto x-6 py-6 flex items-center justify-between">
+  <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
     
     {cardLocked ? (
       <div className="flex items-center gap-4 mx-auto">
@@ -267,9 +267,9 @@ const [cardLocked, setCardLocked] = useState(false);
           </p>
         </div>
       </div>
-  ) : (
+    ) : (
       <>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mx-auto">
           <span className="text-3xl">💌</span>
 
           <h1 className="text-4xl font-black text-slate-800">
@@ -277,12 +277,7 @@ const [cardLocked, setCardLocked] = useState(false);
           </h1>
         </div>
 
-        <button
-          onClick={handleCopyLink}
-          className="text-sm font-semibold text-violet-700 border border-violet-200 hover:bg-violet-50 px-5 py-2 rounded-lg transition"
-        >
-          {copied ? "✓ Link Copied!" : "📋 Copy Share Link"}
-        </button>
+    
       </>
     )}
   </div>

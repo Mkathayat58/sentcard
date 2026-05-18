@@ -48,6 +48,8 @@ export default function PaymentSuccessPage() {
         await fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+
+      
           body: JSON.stringify({
             recipientEmail: data.recipient_email,
             recipientName: data.recipient_name,
@@ -127,7 +129,7 @@ export default function PaymentSuccessPage() {
         {/* Shareable link */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mt-6">
           <h2 className="text-lg font-bold text-slate-800 mb-2">
-            🔗 Share with your team
+            Share with your team
           </h2>
           <p className="text-sm text-slate-500 mb-5">
             Send this link to your colleagues so they can add their messages.
@@ -170,7 +172,7 @@ export default function PaymentSuccessPage() {
             onClick={() => router.push(`/sign-card?id=${cardId}`)}
             className="flex-1 bg-violet-700 text-white py-4 rounded-2xl font-bold hover:bg-violet-800 transition"
           >
-            Sign It Yourself First →
+            Sign It Yourself First
           </button>
           <button
             onClick={() => router.push("/")}

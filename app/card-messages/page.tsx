@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
@@ -25,7 +25,7 @@ const WASHI_TAPE_COLORS = ["#fde68a", "#fbcfe8", "#bae6fd", "#bbf7d0", "#fed7aa"
 const ROTATIONS         = [-2.5, -1.5, -0.8, 0.5, 1.2, 2, 2.8, -2];
 const MESSAGES_PER_SPREAD = 4; // 2 per page × 2 pages
 
-export default function CardMessagesPage() {
+export default function CardMessagesContent() {
   const searchParams = useSearchParams();
   const cardId = searchParams.get("id");
 
@@ -162,7 +162,7 @@ export default function CardMessagesPage() {
           </button>
 
           {!envelopeOpened && (
-            <p className="text-slate-500 text-sm mt-8 italic">Click the envelope to open ↑</p>
+            <p className="text-slate-500 text-sm mt-8 italic"></p>
           )}
         </div>
       )}
@@ -266,7 +266,7 @@ export default function CardMessagesPage() {
                     <div className="flex items-center justify-center h-full">
                       <p className="text-slate-400 italic text-center"
                          style={{ fontFamily: "Caveat", fontSize: "1.5rem" }}>
-                        With love,<br/>your team ❤️
+                      
                       </p>
                     </div>
                   )}
@@ -394,3 +394,4 @@ function MessageNote({
     </div>
   );
 }
+
