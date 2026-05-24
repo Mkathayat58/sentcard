@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
-const DEFAULT_COVER = "/covers/default-cover.svg";
+const DEFAULT_COVER = "/covers/default-cover.png";
 
 // ── Smart suggestions for the occasion field ──────────────────────────────
 const OCCASION_SUGGESTIONS = [
@@ -22,7 +22,6 @@ const OCCASION_SUGGESTIONS = [
   { emoji: "🎄", label: "Holiday Wishes" },
 ];
 
-// ── Themed gradients based on occasion keyword ────────────────────────────
 const THEMES: Record<string, { from: string; to: string; emoji: string }> = {
   birthday:    { from: "#f59e0b", to: "#ec4899", emoji: "🎂" },
   farewell:    { from: "#7c3aed", to: "#6366f1", emoji: "👋" },
@@ -40,7 +39,6 @@ const THEMES: Record<string, { from: string; to: string; emoji: string }> = {
   default:     { from: "#7c3aed", to: "#6366f1", emoji: "💌" },
 };
 
-// Match occasion text to a theme
 const detectTheme = (occasion: string) => {
   const lower = occasion.toLowerCase();
   for (const key of Object.keys(THEMES)) {
@@ -49,7 +47,6 @@ const detectTheme = (occasion: string) => {
   return THEMES.default;
 };
 
-// ── Smart title generator from occasion + recipient ───────────────────────
 const generateTitle = (occasion: string, recipient: string) => {
   const lower = occasion.toLowerCase();
   const name = recipient || "";
@@ -72,12 +69,10 @@ const generateTitle = (occasion: string, recipient: string) => {
   return name ? `A Special Card for ${name} 💌` : "";
 };
 
-// ── Quick delivery presets ────────────────────────────────────────────────
 const getPresetDate = (days: number, hour = 9) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
   d.setHours(hour, 0, 0, 0);
-  // Format for datetime-local: YYYY-MM-DDTHH:MM
   return d.toISOString().slice(0, 16);
 };
 
@@ -88,9 +83,20 @@ const DELIVERY_PRESETS = [
   { label: "In 2 weeks",    getValue: () => getPresetDate(14) },
 ];
 
-// ── Component ─────────────────────────────────────────────────────────────
-export default function CreateCardPage() {
+// Convert a Supabase timestamptz to a datetime-local input value
+const toDatetimeLocal = (iso: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// ── Inner content (uses useSearchParams) ─────────────────────────────────
+function CreateCardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editCardId = searchParams.get("edit");           // 🆕 detect edit mode
+  const isEditMode = !!editCardId;
 
   const [occasion, setOccasion]   = useState("");
   const [recipient, setRecipient] = useState("");
@@ -101,10 +107,45 @@ export default function CreateCardPage() {
   const [selectedCover, setSelectedCover]   = useState(DEFAULT_COVER);
   const [hasCustomCover, setHasCustomCover] = useState(false);
   const [isLoading, setIsLoading]           = useState(false);
+  const [isLoadingCard, setIsLoadingCard]   = useState(isEditMode);  // 🆕
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showPreview, setShowPreview]       = useState(false);
 
-  // Pick up cover from gallery
+  // ── 🆕 Load existing card data when in edit mode ────────────────────────
+  useEffect(() => {
+    if (!editCardId) return;
+
+    const loadCard = async () => {
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("id", editCardId)
+        .single();
+
+      if (error || !data) {
+        console.error("Card not found:", error);
+        alert("Card not found. Returning to create new card.");
+        router.push("/create-card");
+        return;
+      }
+
+      // Pre-fill all fields
+      setOccasion(data.card_type || "");
+      setRecipient(data.recipient_name || "");
+      setTitle(data.card_title || "");
+      setRecipientEmail(data.recipient_email || "");
+      setSenderName(data.sender_name || "");
+      setDeliveryDate(toDatetimeLocal(data.delivery_date));
+      setSelectedCover(data.cover_image || DEFAULT_COVER);
+      setHasCustomCover(!!data.cover_image && data.cover_image !== DEFAULT_COVER);
+
+      setIsLoadingCard(false);
+    };
+
+    loadCard();
+  }, [editCardId, router]);
+
+  // Pick up cover from gallery (after returning from /choose-cover)
   useEffect(() => {
     const stored = localStorage.getItem("selected_cover");
     if (stored) {
@@ -114,20 +155,18 @@ export default function CreateCardPage() {
     }
   }, []);
 
-  // Auto-suggest title from occasion + recipient
+  // Auto-suggest title from occasion + recipient — only when NOT editing
   useEffect(() => {
+    if (isEditMode) return;          // 🆕 don't overwrite user's existing title
     setTitle(generateTitle(occasion, recipient));
-  }, [occasion, recipient]);
+  }, [occasion, recipient, isEditMode]);
 
-  // Detect theme from occasion
   const theme = detectTheme(occasion);
 
-  // Progress calculation
   const fields = [occasion, recipient, recipientEmail, senderName, deliveryDate];
   const completedCount = fields.filter(Boolean).length;
   const progress = (completedCount / fields.length) * 100;
 
-  // Friendly relative time for delivery date
   const getRelativeTime = () => {
     if (!deliveryDate) return null;
     const target = new Date(deliveryDate).getTime();
@@ -141,7 +180,8 @@ export default function CreateCardPage() {
     return "⏰ In less than an hour";
   };
 
-  const handleCreateCard = async () => {
+  // ── 🆕 Submit handler — INSERT for create, UPDATE for edit ──────────────
+  const handleSubmit = async () => {
     if (!recipient || !title || !recipientEmail || !senderName) {
       alert("Please fill in all required fields.");
       return;
@@ -149,129 +189,153 @@ export default function CreateCardPage() {
 
     setIsLoading(true);
 
-    const { data, error } = await supabase
-      .from("cards")
-      .insert([{
-        card_type:       occasion || "Card",
-        recipient_name:  recipient,
-        card_title:      title,
-        template:        "Elegant Purple",
-        recipient_email: recipientEmail.toLowerCase(),
-        sender_name:     senderName,
-        delivery_date:   deliveryDate ? new Date(deliveryDate).toISOString() : null,
-        payment_status:  "pending",
-        cover_image:     selectedCover,
-      }])
-      .select()
-      .single();
+    const payload = {
+      card_type:       occasion || "Card",
+      recipient_name:  recipient,
+      card_title:      title,
+      template:        "Elegant Purple",
+      recipient_email: recipientEmail.toLowerCase(),
+      sender_name:     senderName,
+      delivery_date:   deliveryDate ? new Date(deliveryDate).toISOString() : null,
+      cover_image:     selectedCover,
+    };
 
-    if (error) {
-      console.error(error);
-      alert("Something went wrong while creating the card.");
-      setIsLoading(false);
-      return;
+    if (isEditMode) {
+      // ── UPDATE existing card ──
+      const { error } = await supabase
+        .from("cards")
+        .update(payload)
+        .eq("id", editCardId!);
+
+      if (error) {
+        console.error(error);
+        alert("Could not save changes.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Return to sign-card after editing
+      router.push(`/sign-card?id=${editCardId}`);
+    } else {
+      // ── CREATE new card ──
+      const { data, error } = await supabase
+        .from("cards")
+        .insert([{ ...payload, payment_status: "pending" }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error(error);
+        alert("Something went wrong while creating the card.");
+        setIsLoading(false);
+        return;
+      }
+
+      router.push(`/payment-required?cardId=${data.id}`);
     }
-
-    router.push(`/payment-required?cardId=${data.id}`);
   };
 
-  // Minimum delivery date (now)
   const minDate = new Date().toISOString().slice(0, 16);
+
+  // ── Loading existing card data ──
+  if (isLoadingCard) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-slate-500 font-medium">Loading card details…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50">
 
       {/* ── Header with progress bar ── */}
       <div className="bg-white border-b border-slate-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-5 text-center">
+        <div className="max-w-7xl mx-auto px-6 py-5 text-center relative">
+
+          {/* 🆕 Back button (visible only in edit mode) */}
+          {isEditMode && (
+            <button
+              onClick={() => router.push(`/sign-card?id=${editCardId}`)}
+              className="absolute left-6 top-1/2 -translate-y-1/2 text-sm text-slate-500 hover:text-slate-800 transition flex items-center gap-1"
+            >
+              ← Back to card
+            </button>
+          )}
+
           <h1 className="text-3xl font-extrabold text-slate-800">
-            ✉️ Create Your Card
+            {isEditMode ? "⚙️ Card Settings" : "✉️ Create Your Card"}
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            {progress === 100 ? "Looking great! Ready to send 🎉" : `You're ${Math.round(progress)}% there`}
+            {isEditMode
+              ? "Make any changes before delivery"
+              : (progress === 100 ? "Looking great! Ready to send 🎉" : `You're ${Math.round(progress)}% there`)}
           </p>
         </div>
-        {/* Progress bar */}
-        <div className="h-1 bg-slate-100 overflow-hidden">
-          <div
-            className="h-full transition-all duration-500"
-            style={{
-              width: `${progress}%`,
-              background: `linear-gradient(90deg, ${theme.from}, ${theme.to})`,
-            }}
-          />
-        </div>
+        {/* Progress bar — hide in edit mode */}
+        {!isEditMode && (
+          <div className="h-1 bg-slate-100 overflow-hidden">
+            <div
+              className="h-full transition-all duration-500"
+              style={{
+                width: `${progress}%`,
+                background: `linear-gradient(90deg, ${theme.from}, ${theme.to})`,
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 p-6 lg:p-10">
 
         {/* ════════════════════════════════════════
-            LEFT — Live Card Preview
+            LEFT — Cover preview
         ════════════════════════════════════════ */}
         <section className="flex flex-col items-center lg:sticky lg:top-6 lg:self-start">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h2 className="text-2xl font-extrabold text-slate-800 text-center mb-2">
+              Choose Your Cover Photo
+            </h2>
 
-          <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 w-full overflow-hidden">
+            <p className="text-sm text-slate-500 text-center mb-6">
+              {isEditMode
+                ? "You can change the cover anytime before delivery."
+                : "Pick a cover that matches the occasion. You can change it anytime before payment."}
+            </p>
 
-            {/* Cover image with live overlay */}
-            <div className="relative w-full aspect-[16/10] rounded-2xl overflow-hidden bg-slate-50 mb-4">
+            <div className="rounded-3xl overflow-hidden border border-slate-100 shadow-lg bg-slate-50">
               <img
                 src={selectedCover}
                 alt="Selected cover"
-                className="w-full h-full object-cover"
+                className="w-full h-[420px] object-cover"
               />
-              {/* Themed gradient overlay */}
-              <div
-                className="absolute inset-0 opacity-40"
-                style={{
-                  background: `linear-gradient(135deg, ${theme.from}, ${theme.to})`,
-                }}
-              />
-              {/* Live text overlay */}
-              <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
-                <p className="text-xs uppercase tracking-widest opacity-80 mb-1">
-                  {theme.emoji} {occasion || "Your Card"}
-                </p>
-                <h2
-                  className="text-2xl font-extrabold leading-tight mb-2 drop-shadow-lg"
-                  style={{ fontFamily: "Dancing Script, cursive", fontSize: "2.2rem", fontWeight: 700 }}
-                >
-                  {title || "Your card title appears here"}
-                </h2>
-                {recipient && (
-                  <p className="text-sm opacity-90 drop-shadow">
-                    For <span className="font-bold">{recipient}</span>
-                    {senderName && <> · from <span className="font-bold">{senderName}</span></>}
-                  </p>
-                )}
-              </div>
             </div>
 
             <button
               type="button"
               onClick={() =>
-                router.push(`/choose-cover?current=${encodeURIComponent(selectedCover)}`)
+                router.push(`/choose-cover?current=${encodeURIComponent(selectedCover)}${isEditMode ? `&returnTo=create-card&edit=${editCardId}` : ""}`)
               }
-              className="w-full border-2 border-dashed border-slate-300 text-slate-600 px-6 py-3 rounded-2xl font-semibold hover:border-violet-400 hover:text-violet-700 transition"
+              className="mt-6 w-full bg-violet-700 text-white px-6 py-4 rounded-2xl font-bold hover:bg-violet-800 transition"
             >
               🖼 Choose a Different Cover
             </button>
 
             {hasCustomCover && (
-              <p className="text-xs text-violet-500 text-center mt-2">
+              <p className="text-xs text-violet-500 text-center mt-3">
                 ✨ Custom cover selected
               </p>
             )}
-          </div>
 
-          {/* Preview button */}
-          {recipient && title && (
-            <button
-              onClick={() => setShowPreview(true)}
-              className="mt-4 text-sm text-slate-500 hover:text-violet-700 transition underline"
-            >
-              👁 Preview what {recipient} will see
-            </button>
-          )}
+            <div className="mt-6 bg-violet-50 rounded-2xl p-4 text-center">
+              <p className="text-sm font-semibold text-violet-700">
+                This cover will appear on the final card.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* ════════════════════════════════════════
@@ -297,7 +361,6 @@ export default function CreateCardPage() {
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               />
 
-              {/* Suggestion chips */}
               {showSuggestions && !occasion && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {OCCASION_SUGGESTIONS.map((s) => (
@@ -341,7 +404,7 @@ export default function CreateCardPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Their email 📧
+                  Recipient email 📧
                 </label>
                 <input
                   type="email"
@@ -372,7 +435,9 @@ export default function CreateCardPage() {
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
               <span className="w-7 h-7 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-extrabold">3</span>
               Card title
-              <span className="ml-2 font-normal text-xs text-violet-500">✨ auto-suggested, you can edit</span>
+              {!isEditMode && (
+                <span className="ml-2 font-normal text-xs text-violet-500">✨ auto-suggested, you can edit</span>
+              )}
             </h3>
 
             <input
@@ -391,7 +456,6 @@ export default function CreateCardPage() {
               When should we deliver it?
             </h3>
 
-            {/* Quick presets */}
             <div className="flex flex-wrap gap-2 mb-3">
               {DELIVERY_PRESETS.map((p) => (
                 <button
@@ -420,32 +484,45 @@ export default function CreateCardPage() {
             )}
           </div>
 
-          {/* Pricing banner */}
-          <div
-            className="rounded-2xl p-4 flex items-center gap-3 border"
-            style={{
-              background: `linear-gradient(135deg, ${theme.from}10, ${theme.to}10)`,
-              borderColor: `${theme.from}30`,
-            }}
-          >
-            <span className="text-2xl">💜</span>
-            <div className="flex-1">
-              <p className="font-bold text-slate-800">$4.99 one-time</p>
-              <p className="text-xs text-slate-500">
-                Unlimited signers · Photos · Scheduled delivery · Lifetime access
-              </p>
+          {/* Pricing banner — only show for new cards */}
+          {!isEditMode && (
+            <div
+              className="rounded-2xl p-4 flex items-center gap-3 border"
+              style={{
+                background: `linear-gradient(135deg, ${theme.from}10, ${theme.to}10)`,
+                borderColor: `${theme.from}30`,
+              }}
+            >
+              <span className="text-2xl">💜</span>
+              <div className="flex-1">
+                <p className="font-bold text-slate-800">$4.99 one-time</p>
+                <p className="text-xs text-slate-500">
+                  Unlimited signers · Photos · Scheduled delivery · Lifetime access
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Submit button */}
           <button
-            onClick={handleCreateCard}
+            onClick={handleSubmit}
             disabled={isLoading}
             className="w-full py-4 rounded-2xl font-bold text-white text-lg disabled:opacity-50 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-lg"
             style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}
           >
-            {isLoading ? "Creating your card..." : "Continue to Payment →"}
+            {isLoading
+              ? (isEditMode ? "Saving changes…" : "Creating your card...")
+              : (isEditMode ? "💾 Save Changes" : "Continue to Payment →")}
           </button>
+
+          {isEditMode && (
+            <button
+              onClick={() => router.push(`/sign-card?id=${editCardId}`)}
+              className="w-full py-3 rounded-2xl font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition"
+            >
+              Cancel
+            </button>
+          )}
         </section>
       </div>
 
@@ -483,5 +560,18 @@ export default function CreateCardPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// ── Default export wraps in Suspense ──────────────────────────────────────
+export default function CreateCardPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-slate-500 font-medium">Loading…</p>
+      </main>
+    }>
+      <CreateCardContent />
+    </Suspense>
   );
 }
