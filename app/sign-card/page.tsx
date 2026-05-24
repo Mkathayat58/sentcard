@@ -91,6 +91,44 @@ export default function SignCardPage() {
   const [animating, setAnimating]       = useState(false);
   const [isComposing, setIsComposing]   = useState(false);
 
+  const [showGifPicker, setShowGifPicker] = useState(false);
+const [gifQuery, setGifQuery]           = useState("");
+const [gifs, setGifs]                   = useState<any[]>([]);
+const [gifsLoading, setGifsLoading]     = useState(false);
+
+const searchGifs = async (query: string) => {
+  setGifsLoading(true);
+  const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
+  const endpoint = query
+    ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=24`
+    : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24`;
+  const res  = await fetch(endpoint);
+  const json = await res.json();
+  setGifs(json.data || []);
+  setGifsLoading(false);
+};
+
+const handleSelectGif = async (gifUrl: string) => {
+  if (!cardId) return;
+  const editToken  = crypto.randomUUID();
+  const targetPage = cardViewPage === 0 ? 1 : cardViewPage;
+  await supabase.from("messages").insert([{
+    card_id:     cardId,
+    signer_name: signerName.trim() || "Anonymous",
+    message:     "",
+    photo_url:   gifUrl,
+    edit_token:  editToken,
+    page_number: targetPage,
+    pos_x:       50 + Math.random() * 200,
+    pos_y:       50 + Math.random() * 300,
+  }]);
+  saveToken(editToken);
+  setShowGifPicker(false);
+  setGifs([]);
+  setGifQuery("");
+  fetchAll();
+};
+
   // Compose
   const [signerName, setSignerName]       = useState("");
   const [message, setMessage]             = useState("");
@@ -825,10 +863,11 @@ height: `${composeHeight - 100}px`, }}
                   className="w-full bg-teal-600 text-white px-4 py-2.5 rounded-full font-bold text-sm hover:bg-teal-700 transition flex items-center justify-center gap-2">
                   🖼 Add photo
                 </button>
-                <button
-                  className="w-full bg-teal-600 text-white px-4 py-2.5 rounded-full font-bold text-sm hover:bg-teal-700 transition flex items-center justify-center gap-2">
-                  😊 Add GIF / sticker
-                </button>
+<button
+  onClick={() => { setShowGifPicker(true); searchGifs(""); }}
+  className="w-full bg-teal-600 text-white px-4 py-2.5 rounded-full font-bold text-sm hover:bg-teal-700 transition flex items-center justify-center gap-2">
+  😊 Add GIF / sticker
+</button>
               </>
             )}
 
@@ -852,6 +891,61 @@ height: `${composeHeight - 100}px`, }}
           </aside>
         </div>
       </div>
+      {showGifPicker && (
+  <div
+    className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+    onClick={() => setShowGifPicker(false)}
+  >
+    <div
+      className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-slate-800">😊 Pick a GIF</h2>
+        <button onClick={() => setShowGifPicker(false)} className="text-slate-400 hover:text-slate-700 text-2xl">✕</button>
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Search for GIFs… (e.g. 'happy birthday', 'celebrate')"
+          value={gifQuery}
+          onChange={(e) => setGifQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && searchGifs(gifQuery)}
+          className="flex-1 border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 outline-none focus:border-violet-400"
+        />
+        <button
+          onClick={() => searchGifs(gifQuery)}
+          className="bg-violet-700 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-violet-800 transition"
+        >
+          Search
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {gifsLoading ? (
+          <div className="text-center py-12 text-slate-400">Loading GIFs…</div>
+        ) : gifs.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">No GIFs found. Try another search!</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {gifs.map((g: any) => (
+              <button
+                key={g.id}
+                onClick={() => handleSelectGif(g.images.fixed_height.url)}
+                className="rounded-xl overflow-hidden hover:ring-4 hover:ring-violet-400 transition bg-slate-100"
+              >
+                <img src={g.images.fixed_height.url} alt={g.title || "GIF"} className="w-full h-32 object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-slate-400 text-center mt-4">Powered by GIPHY</p>
+    </div>
+  </div>
+)}
     </main>
   );
 }
